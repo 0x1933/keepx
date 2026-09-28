@@ -2,7 +2,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { PoolUtils, Raydium, TickUtil, TxVersion } from "@raydium-io/raydium-sdk-v2";
 import BN from "bn.js";
 import Decimal from "decimal.js";
-import { assertAllowlistedPool, getRaydiumMaxLamports, getRaydiumRpcUrl } from "@/lib/raydium/config";
+import { assertAllowlistedPool, getRaydiumMaxLamports, getRaydiumRpcUrl, parseSlippageBps } from "@/lib/raydium/config";
 import { inspectTransaction, simulateTransaction } from "@/lib/solana/tx-helpers";
 
 type OpenPositionInput = {
@@ -32,7 +32,7 @@ export async function prepareClmmOpenPosition(input: OpenPositionInput) {
 
   const lowerPrice = new Decimal(input.lowerPrice);
   const upperPrice = new Decimal(input.upperPrice);
-  if (!lowerPrice.isFinite() || !upperPrice.isFinite() || lowerPrice.gte(upperPrice)) {
+  if (!lowerPrice.isFinite() || !upperPrice.isFinite() || lowerPrice.lte(0) || upperPrice.lte(0) || lowerPrice.gte(upperPrice)) {
     throw new Error("Invalid price range.");
   }
 
@@ -41,7 +41,7 @@ export async function prepareClmmOpenPosition(input: OpenPositionInput) {
     throw new Error("Deposit amount must be greater than zero.");
   }
 
-  const slippageBps = input.slippageBps === undefined ? 50 : Math.floor(Number(input.slippageBps));
+  const slippageBps = parseSlippageBps(input.slippageBps);
   const rpcUrl = getRaydiumRpcUrl();
   const connection = new Connection(rpcUrl, "confirmed");
 
@@ -61,6 +61,7 @@ export async function prepareClmmOpenPosition(input: OpenPositionInput) {
   const baseIsMintA = poolInfo.mintA.address === poolSummary.baseMint;
   const baseSide = baseIsMintA ? "MintA" : "MintB";
   const baseDecimals = baseIsMintA ? poolInfo.mintA.decimals : poolInfo.mintB.decimals;
+  const quoteDecimals = baseIsMintA ? poolInfo.mintB.decimals : poolInfo.mintA.decimals;
   const baseAmount = new BN(depositAmount.mul(new Decimal(10).pow(baseDecimals)).toFixed(0));
 
   const maxLamports = getRaydiumMaxLamports();
@@ -100,13 +101,17 @@ export async function prepareClmmOpenPosition(input: OpenPositionInput) {
     amountHasFee: false
   });
 
+  const otherAmountMax = baseIsMintA ? liquidity.amountSlippageB.amount : liquidity.amountSlippageA.amount;
+  const otherSymbol = baseIsMintA ? poolSummary.quoteSymbol : poolSummary.baseSymbol;
+  const otherMint = baseIsMintA ? poolInfo.mintB.address : poolInfo.mintA.address;
+
   const prepared = await raydium.clmm.openPositionFromBase({
     poolInfo,
     tickLower: lower.tick,
     tickUpper: upper.tick,
     base: baseSide,
     baseAmount,
-    otherAmountMax: baseIsMintA ? liquidity.amountSlippageB.amount : liquidity.amountSlippageA.amount,
+    otherAmountMax,
     txVersion: TxVersion.V0,
     ownerInfo: { useSOLBalance: true },
     associatedOnly: false,
@@ -116,6 +121,14 @@ export async function prepareClmmOpenPosition(input: OpenPositionInput) {
   const serialized = prepared.transaction.serialize();
   const diagnostics = inspectTransaction(prepared.transaction, serialized.length);
   const simulation = await simulateTransaction(prepared.transaction, rpcUrl, { replaceRecentBlockhash: true });
+  if (simulation.err) {
+    throw new Error(`Simulation failed: ${JSON.stringify(simulation.err)}`);
+  }
+
+  const recentBlockhash =
+    "version" in prepared.transaction
+      ? prepared.transaction.message.recentBlockhash
+      : (prepared.transaction as { recentBlockhash?: string }).recentBlockhash;
 
   return {
     status: "prepared" as const,
@@ -128,6 +141,13 @@ export async function prepareClmmOpenPosition(input: OpenPositionInput) {
     upperTick: upper.tick,
     baseAmount: baseAmount.toString(),
     baseSymbol: poolSummary.baseSymbol,
+    baseDecimals,
+    otherAmountMax: otherAmountMax.toString(),
+    otherSymbol,
+    otherMint,
+    otherDecimals: quoteDecimals,
+    slippageBps,
+    recentBlockhash,
     diagnostics,
     instructionTypes: prepared.instructionTypes,
     position: {

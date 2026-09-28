@@ -33,7 +33,3 @@ coverage/
 
 # empty scratch files
 ss
-
-# local-only (not published)
-app/trasnf3r/
-components/trasnf3r-panel.tsx

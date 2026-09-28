@@ -23,7 +23,10 @@ export async function sendPreparedTransaction(
   sendTransaction: NonNullable<WalletContextState["sendTransaction"]>
 ) {
   const signature = await sendTransaction(tx, connection, { skipPreflight: false });
-  await connection.confirmTransaction(signature, "confirmed");
+  const confirmation = await connection.confirmTransaction(signature, "confirmed");
+  if (confirmation.value.err) {
+    throw new Error(`Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`);
+  }
   return signature;
 }
 

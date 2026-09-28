@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle, FrameCorners, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import type { PoolSummary } from "@/lib/pools";
@@ -12,8 +12,13 @@ const stages = ["building", "simulating", "ready", "awaiting_wallet", "submitted
 
 type PrepareMeta = {
   nftMint?: string;
-  simulationErr?: unknown;
   explorerUrl?: string;
+  otherAmountMax?: string;
+  otherSymbol?: string;
+  otherDecimals?: number;
+  preparedLower?: string;
+  preparedUpper?: string;
+  slippageBps?: number;
 };
 
 type ClmmSigningPanelProps = {
@@ -27,6 +32,13 @@ type ClmmSigningPanelProps = {
   dispatch: React.Dispatch<{ type: Parameters<typeof transactionReducer>[1]["type"] }>;
 };
 
+function formatRawAmount(raw: string | undefined, decimals: number | undefined, symbol: string | undefined) {
+  if (!raw || decimals === undefined || !symbol) return "—";
+  const value = Number(raw) / 10 ** decimals;
+  if (!Number.isFinite(value)) return `${raw} ${symbol}`;
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: Math.min(decimals, 6) })} ${symbol}`;
+}
+
 export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlippageChange, stage, dispatch }: ClmmSigningPanelProps) {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
@@ -34,14 +46,18 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
   const [preparedTx, setPreparedTx] = useState<DecodedTransaction | null>(null);
   const [meta, setMeta] = useState<PrepareMeta | null>(null);
   const [status, setStatus] = useState("");
+  const prepareGeneration = useRef(0);
 
   const slippageBps = useMemo(() => Math.max(1, Math.round(slippage * 100)), [slippage]);
+  const walletKey = publicKey?.toBase58() ?? "";
+  const rpcEndpoint = connection.rpcEndpoint;
 
   useEffect(() => {
+    prepareGeneration.current += 1;
     setPreparedTx(null);
     setMeta(null);
     setStatus("");
-  }, [pool.id, lower, upper, deposit, slippage]);
+  }, [pool.id, lower, upper, deposit, slippage, walletKey, rpcEndpoint]);
 
   async function prepare(): Promise<DecodedTransaction | null> {
     if (!publicKey) {
@@ -50,6 +66,7 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
       return null;
     }
 
+    const generation = ++prepareGeneration.current;
     setBusy(true);
     setStatus("");
     dispatch({ type: "BUILD" });
@@ -69,28 +86,40 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
       });
 
       const data = await response.json();
+      if (generation !== prepareGeneration.current) return null;
       dispatch({ type: "SIMULATE" });
 
       if (!response.ok || !data.transactionBase64) {
         throw new Error(data.error ?? "Prepare failed.");
       }
+      if (data.simulation?.err) {
+        throw new Error(`Simulation failed: ${JSON.stringify(data.simulation.err)}`);
+      }
 
       const tx = decodePreparedTransaction(data.transactionBase64);
       setPreparedTx(tx);
-      setMeta({ nftMint: data.position?.nftMint, simulationErr: data.simulation?.err });
+      setMeta({
+        nftMint: data.position?.nftMint,
+        otherAmountMax: data.otherAmountMax,
+        otherSymbol: data.otherSymbol,
+        otherDecimals: data.otherDecimals,
+        preparedLower: data.lowerPrice,
+        preparedUpper: data.upperPrice,
+        slippageBps: data.slippageBps
+      });
       dispatch({ type: "READY" });
-      setStatus(
-        data.simulation?.err
-          ? "Prepared with simulation warnings. Review carefully in your wallet before approving."
-          : "Transaction prepared. Phantom will show a full preview when you approve."
-      );
+      setStatus("Transaction prepared and simulated. Review both token maxima below, then approve in your wallet.");
       return tx;
     } catch (error) {
-      dispatch({ type: "FAIL" });
-      setStatus(error instanceof Error ? error.message : "Prepare failed.");
+      if (generation === prepareGeneration.current) {
+        dispatch({ type: "FAIL" });
+        setPreparedTx(null);
+        setMeta(null);
+        setStatus(error instanceof Error ? error.message : "Prepare failed.");
+      }
       return null;
     } finally {
-      setBusy(false);
+      if (generation === prepareGeneration.current) setBusy(false);
     }
   }
 
@@ -99,20 +128,22 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
       setStatus("Wallet does not support sending transactions.");
       return;
     }
-
-    const tx = preparedTx ?? (await prepare());
-    if (!tx) return;
+    if (!preparedTx) {
+      setStatus("Prepare a fresh transaction before approving.");
+      return;
+    }
 
     setBusy(true);
     dispatch({ type: "REQUEST_SIGNATURE" });
     dispatch({ type: "SUBMIT" });
     try {
-      const signature = await sendPreparedTransaction(tx, connection, sendTransaction);
+      const signature = await sendPreparedTransaction(preparedTx, connection, sendTransaction);
       dispatch({ type: "CONFIRM" });
       dispatch({ type: "RESOLVE" });
       const explorerUrl = solscanTxUrl(signature);
       setMeta((current) => ({ ...current, explorerUrl }));
       setStatus(`Position opened. Confirmed: ${signature.slice(0, 8)}…`);
+      setPreparedTx(null);
     } catch (error) {
       dispatch({ type: "FAIL" });
       setStatus(error instanceof Error ? error.message : "Broadcast failed.");
@@ -121,18 +152,21 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
     }
   }
 
+  const otherMaxLabel = formatRawAmount(meta?.otherAmountMax, meta?.otherDecimals, meta?.otherSymbol);
+
   return (
     <>
       <div className="panel-title"><LockKey size={17} /> Signing snapshot</div>
       <div className="snapshot-grid">
-        <Metric label="Deposit" value={`${deposit} ${pool.baseSymbol}`} />
-        <Metric label="Lower" value={lower.toFixed(2)} />
-        <Metric label="Upper" value={upper.toFixed(2)} />
-        <Metric label="Slippage" value={`${slippage.toFixed(1)}%`} />
+        <Metric label="Base deposit" value={`${deposit} ${pool.baseSymbol}`} />
+        <Metric label="Other token max" value={meta ? otherMaxLabel : "Prepare to reveal"} />
+        <Metric label="Prepared lower" value={meta?.preparedLower ?? lower.toFixed(2)} />
+        <Metric label="Prepared upper" value={meta?.preparedUpper ?? upper.toFixed(2)} />
+        <Metric label="Slippage" value={`${(meta?.slippageBps ?? slippageBps) / 100}%`} />
       </div>
       <label className="field">
-        <span>Slippage</span>
-        <input value={slippage} onChange={(e) => onSlippageChange(Number(e.target.value))} type="number" step="0.1" />
+        <span>Slippage %</span>
+        <input value={slippage} onChange={(e) => onSlippageChange(Number(e.target.value))} type="number" step="0.1" min="0.01" max="50" />
       </label>
       <div className="stage-list">
         {stages.map((item) => (
@@ -147,7 +181,7 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
         <button className="btn secondary" disabled={busy} onClick={() => void prepare()} style={{ width: "100%" }}>
           Prepare transaction <ArrowRight size={16} />
         </button>
-        <button className="btn" disabled={busy} onClick={() => void broadcast()} style={{ width: "100%" }}>
+        <button className="btn" disabled={busy || !preparedTx} onClick={() => void broadcast()} style={{ width: "100%" }}>
           Approve &amp; send in wallet <ArrowRight size={16} />
         </button>
       </div>
@@ -159,7 +193,10 @@ export function ClmmSigningPanel({ pool, lower, upper, deposit, slippage, onSlip
         </p>
       ) : null}
       {status ? <p className="clmm-status-line" role="status">{status}</p> : null}
-      <p><WarningCircle size={15} /> Prepare uses your deposit amount ({deposit} {pool.baseSymbol}) plus small rent for the position NFT. Re-prepare after changing deposit or range. Your wallet shows the full preview before anything is sent.</p>
+      <p>
+        <WarningCircle size={15} /> A CLMM open may debit both tokens up to the prepared maxima, plus account rent and network fees.
+        Re-prepare after changing wallet, deposit, range, or slippage. Your wallet shows the full instruction preview before anything is sent.
+      </p>
     </>
   );
 }

@@ -63,10 +63,10 @@ export function RangeApp() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
       >
-        <Metric label="Portfolio value" value="$1,332.58" />
-        <Metric label="Active positions" value="2" />
-        <Metric label="In range" value="1" />
-        <Metric label="Unclaimed fees" value="+$34.18 USD" />
+        <Metric label="Demo portfolio value" value="$1,332.58" />
+        <Metric label="Demo active positions" value="2" />
+        <Metric label="Demo in range" value="1" />
+        <Metric label="Demo unclaimed fees" value="+$34.18 USD" />
       </motion.section>
 
       <motion.div
@@ -76,7 +76,7 @@ export function RangeApp() {
         variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08 } } }}
       >
         <motion.aside className="panel pool-panel" variants={{ hidden: { opacity: 0, y: 22 }, show: { opacity: 1, y: 0 } }}>
-          <div className="panel-title"><ShieldCheck size={17} /> Allowlisted pools</div>
+          <div className="panel-title"><ShieldCheck size={17} /> Verified pools</div>
           <div className="market-list">
             {allowlistedPools.map((item) => (
               <button className={item.id === poolId ? "market-item active" : "market-item"} key={item.id} onClick={() => setPoolId(item.id)}>
@@ -89,7 +89,7 @@ export function RangeApp() {
           <div className="pool-facts">
             <Metric label="Base mint" value={`${pool.baseMint.slice(0, 4)}...${pool.baseMint.slice(-4)}`} />
             <Metric label="Quote mint" value={`${pool.quoteMint.slice(0, 4)}...${pool.quoteMint.slice(-4)}`} />
-            <Metric label="Pool TVL" value={pool.tvlUsd ? `$${(pool.tvlUsd / 1_000_000).toFixed(1)}M` : "$48.2M"} />
+            <Metric label="Demo pool TVL" value={pool.tvlUsd ? `$${(pool.tvlUsd / 1_000_000).toFixed(1)}M` : "—"} />
           </div>
         </motion.aside>
 
@@ -98,7 +98,7 @@ export function RangeApp() {
             <div>
               <span className="eyebrow">Range builder</span>
               <h1 className="mono">{pool.pair}</h1>
-              <p>Current price {pool.currentPrice.toFixed(2)} {pool.quoteSymbol}. The selected range is aligned visually before transaction construction.</p>
+              <p>Illustrative spot {pool.currentPrice.toFixed(2)} {pool.quoteSymbol} (demo figure). The selected range is aligned visually before transaction construction.</p>
             </div>
             <button className="btn secondary" onClick={() => { setLower(172); setUpper(198.5); dispatch({ type: "RESET" }); }}>Reset range</button>
           </div>
@@ -144,7 +144,7 @@ export function RangeApp() {
             <Metric label="Lower edge" value={`${health.distanceToLowerPct.toFixed(1)}%`} />
             <Metric label="Upper edge" value={`${health.distanceToUpperPct.toFixed(1)}%`} />
             <Metric label="Composition" value={`${composition.tokenA}% ${pool.baseSymbol} / ${composition.tokenB}% ${pool.quoteSymbol}`} />
-            <Metric label="Counterpart" value={`${counterpart.toFixed(2)} USDC`} />
+            <Metric label="Demo counterpart" value={`${counterpart.toFixed(2)} ${pool.quoteSymbol}`} />
             <Metric label="Range width" value={`${health.rangeWidthPct.toFixed(1)}%`} />
           </section>
         </motion.section>
@@ -165,7 +165,8 @@ export function RangeApp() {
 
       <motion.section className="lower-grid" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-120px" }} transition={{ duration: 0.6 }}>
         <div className="panel">
-          <div className="panel-title"><Gauge size={17} /> Active positions</div>
+          <div className="panel-title"><Gauge size={17} /> Demo positions</div>
+          <p className="clmm-meta-line">Example rows only. Your wallet positions load on /positions.</p>
           <div className="position-stack">
             {demoPositions.map((position) => (
               <article className="position-row" key={position.id}>
@@ -190,14 +191,14 @@ export function RangeApp() {
 
       <motion.section className="chart-grid-panel" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-120px" }} transition={{ duration: 0.6 }}>
         <div className="panel">
-          <div className="panel-title">Candlestick range tape</div>
+          <div className="panel-title">Demo candlestick tape</div>
           <CandlestickChart data={chartData} aspectRatio="2.4 / 1" margin={{ top: 18, right: 18, bottom: 18, left: 18 }}>
             <Grid horizontal vertical stroke="rgba(255,255,255,0.12)" strokeDasharray="4,6" />
             <Candlestick positiveFill="#14b8a6" negativeFill="#f43f46" />
           </CandlestickChart>
         </div>
         <div className="panel">
-          <div className="panel-title">Liquidity and fee composition</div>
+          <div className="panel-title">Demo liquidity and fees</div>
           <ComposedChart data={chartData} aspectRatio="2.4 / 1" margin={{ top: 18, right: 18, bottom: 18, left: 18 }} barSize={9}>
             <Grid horizontal stroke="rgba(255,255,255,0.12)" strokeDasharray="4,6" />
             <SeriesBar dataKey="liquidity" fill="rgba(20,184,166,0.42)" radius={4} />
@@ -206,7 +207,7 @@ export function RangeApp() {
           </ComposedChart>
         </div>
         <div className="panel">
-          <div className="panel-title">Transaction funnel</div>
+          <div className="panel-title">Demo transaction funnel</div>
           <FunnelChart
             data={funnelData}
             color="#14b8a6"

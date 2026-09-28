@@ -133,6 +133,11 @@ type VisitBody = {
   kind?: "entry" | "navigation";
 };
 
+function stripQuery(value: string): string {
+  const q = value.indexOf("?");
+  return q === -1 ? value : value.slice(0, q);
+}
+
 export async function POST(request: Request) {
   if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
     return NextResponse.json({ ok: false, reason: "unset" }, { status: 204 });
@@ -146,13 +151,13 @@ export async function POST(request: Request) {
   try {
     const raw = (await request.json()) as VisitBody;
     if (typeof raw.path === "string" && raw.path.startsWith("/")) {
-      path = raw.path.slice(0, 300);
+      path = stripQuery(raw.path).slice(0, 300);
     }
     if (typeof raw.origin === "string") {
-      origin = raw.origin.slice(0, 500);
+      origin = stripQuery(raw.origin).slice(0, 500);
     }
     if (typeof raw.referrer === "string") {
-      referrer = raw.referrer.slice(0, 500);
+      referrer = stripQuery(raw.referrer).slice(0, 500);
     }
     if (raw.kind === "navigation") {
       kind = "navigation";

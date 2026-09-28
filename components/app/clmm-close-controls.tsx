@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { WarningCircle } from "@phosphor-icons/react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { decodePreparedTransaction, sendPreparedTransaction, solscanTxUrl } from "@/lib/raydium/clmm-wallet";
@@ -27,12 +27,16 @@ export function ClmmCloseControls({ position, onClosed }: ClmmCloseControlsProps
   const [status, setStatus] = useState("");
   const [minOut, setMinOut] = useState<{ amountA: string; amountB: string; slippageBps: number } | null>(null);
   const [preparedTx, setPreparedTx] = useState<DecodedTransaction | null>(null);
+  const prepareGeneration = useRef(0);
+  const walletKey = publicKey?.toBase58() ?? "";
+  const rpcEndpoint = connection.rpcEndpoint;
 
   useEffect(() => {
+    prepareGeneration.current += 1;
     setPreparedTx(null);
     setMinOut(null);
     setStatus("");
-  }, [position.nftMint]);
+  }, [position.nftMint, walletKey, rpcEndpoint]);
 
   const prepare = useCallback(async () => {
     if (!publicKey) {
@@ -40,6 +44,7 @@ export function ClmmCloseControls({ position, onClosed }: ClmmCloseControlsProps
       return null;
     }
 
+    const generation = ++prepareGeneration.current;
     setBusy(true);
     setStatus("");
     try {
@@ -53,20 +58,28 @@ export function ClmmCloseControls({ position, onClosed }: ClmmCloseControlsProps
         })
       });
       const data = await response.json();
+      if (generation !== prepareGeneration.current) return null;
       if (!response.ok || !data.transactionBase64) {
         throw new Error(data.error ?? "Prepare failed.");
+      }
+      if (data.simulation?.err) {
+        throw new Error(`Simulation failed: ${JSON.stringify(data.simulation.err)}`);
       }
 
       const tx = decodePreparedTransaction(data.transactionBase64);
       setPreparedTx(tx);
       setMinOut(data.minimumWithdrawal ?? null);
-      setStatus("Close prepared. Approve in your wallet when ready — Phantom shows the preview.");
+      setStatus("Close prepared and simulated. Approve in your wallet when ready.");
       return tx;
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Prepare failed.");
+      if (generation === prepareGeneration.current) {
+        setPreparedTx(null);
+        setMinOut(null);
+        setStatus(error instanceof Error ? error.message : "Prepare failed.");
+      }
       return null;
     } finally {
-      setBusy(false);
+      if (generation === prepareGeneration.current) setBusy(false);
     }
   }, [position.nftMint, position.poolId, publicKey]);
 
@@ -75,15 +88,17 @@ export function ClmmCloseControls({ position, onClosed }: ClmmCloseControlsProps
       setStatus("Wallet does not support sending transactions.");
       return;
     }
+    if (!preparedTx) {
+      setStatus("Prepare a fresh close transaction before approving.");
+      return;
+    }
     if (!window.confirm("Close this position? Liquidity will be withdrawn and the position account closed.")) return;
-
-    const tx = preparedTx ?? (await prepare());
-    if (!tx) return;
 
     setBusy(true);
     try {
-      const signature = await sendPreparedTransaction(tx, connection, sendTransaction);
+      const signature = await sendPreparedTransaction(preparedTx, connection, sendTransaction);
       setStatus(`Closed: ${signature.slice(0, 8)}…`);
+      setPreparedTx(null);
       onClosed?.();
       window.open(solscanTxUrl(signature), "_blank", "noopener,noreferrer");
     } catch (error) {
@@ -104,7 +119,7 @@ export function ClmmCloseControls({ position, onClosed }: ClmmCloseControlsProps
         <button type="button" className="btn secondary text-xs py-1.5 px-3" disabled={busy} onClick={() => void prepare()}>
           Prepare close
         </button>
-        <button type="button" className="btn text-xs py-1.5 px-3" disabled={busy} onClick={() => void broadcast()}>
+        <button type="button" className="btn text-xs py-1.5 px-3" disabled={busy || !preparedTx} onClick={() => void broadcast()}>
           Approve &amp; close
         </button>
       </div>

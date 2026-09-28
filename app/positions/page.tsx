@@ -13,24 +13,32 @@ export default function PositionsPage() {
   const [filterState, setFilterState] = useState<"ALL" | "IN_RANGE" | "OUT_OF_RANGE">("ALL");
   const [positions, setPositions] = useState<WalletClmmPosition[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [status, setStatus] = useState("Connect a wallet and refresh to load on-chain CLMM positions.");
 
   const loadPositions = useCallback(async () => {
     if (!publicKey) {
       setPositions([]);
+      setLoadError(null);
       setStatus("Connect a wallet to inspect Raydium CLMM positions.");
       return;
     }
 
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await fetch(`/api/raydium/clmm-close-position?wallet=${encodeURIComponent(publicKey.toBase58())}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Lookup failed.");
       setPositions(data.positions ?? []);
-      setStatus(`Loaded ${(data.positions ?? []).length} on-chain position(s).`);
+      const poolErrors = Array.isArray(data.poolErrors) ? data.poolErrors : [];
+      const suffix = poolErrors.length ? ` (${poolErrors.length} pool lookup warning(s))` : "";
+      setStatus(`Loaded ${(data.positions ?? []).length} on-chain position(s)${suffix}.`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Lookup failed.");
+      setPositions([]);
+      const message = error instanceof Error ? error.message : "Lookup failed.";
+      setLoadError(message);
+      setStatus(message);
     } finally {
       setLoading(false);
     }
@@ -70,7 +78,7 @@ export default function PositionsPage() {
           </div>
           <div className="stat-metric-card">
             <small>Status</small>
-            <strong>{loading ? "Refreshing…" : "Ready"}</strong>
+            <strong>{loading ? "Refreshing…" : loadError ? "Error" : "Ready"}</strong>
           </div>
           <div className="stat-metric-card">
             <small>Protocol</small>
@@ -109,12 +117,27 @@ export default function PositionsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredPositions.length === 0 ? (
+              {loadError ? (
                 <tr>
                   <td colSpan={5}>
                     <div className="empty-positions-state">
                       <Warning size={18} />
-                      <p>No allowlisted-pool positions found for this wallet.</p>
+                      <p>Position lookup failed. {loadError}</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredPositions.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="empty-positions-state">
+                      <Warning size={18} />
+                      <p>
+                        {loading
+                          ? "Loading positions…"
+                          : publicKey
+                            ? "No allowlisted-pool positions found for this wallet."
+                            : "Connect a wallet to load positions."}
+                      </p>
                     </div>
                   </td>
                 </tr>

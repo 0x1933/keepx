@@ -70,7 +70,8 @@ const sections = [
   { id: "raydium-checklist", label: "Raydium SDK V2 Boundary", icon: Cpu },
   { id: "tick-math", label: "Tick Alignment & Math", icon: Sliders },
   { id: "quickstart", label: "Developer Quickstart", icon: TerminalWindow },
-  { id: "security-model", label: "Security & Audits", icon: LockKey }
+  { id: "security-model", label: "Security & Audits", icon: LockKey },
+  { id: "privacy", label: "Privacy & Telemetry", icon: Wallet }
 ];
 
 const raydiumMethods = [
@@ -346,6 +347,24 @@ npm run typecheck`}
                 <li><strong>Impermanent Loss:</strong> If the price of Token A falls below your lower range, your position will convert 100% into Token A.</li>
                 <li><strong>No Fee Earnings Out of Range:</strong> While market price is outside your framed interval, the position does not accrue trading fees.</li>
                 <li><strong>Non-Custodial Smart Contract Safety:</strong> All funds are deposited into verified Raydium CLMM program accounts (`CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK`).</li>
+              </ul>
+            </section>
+
+            <section id="privacy" className="doc-section-card">
+              <h2>
+                <Wallet size={24} className="text-slate-300" />
+                Privacy &amp; Visit Telemetry
+              </h2>
+              <p>
+                Keepx may record basic page-view telemetry when Telegram reporting is configured on the server.
+                The client beacon sends the pathname (without query strings), page origin path, optional referrer, and visit kind.
+                The server may add approximate IP, available location headers, user agent, and a timestamp, then forward a summary to an operator Telegram chat.
+              </p>
+              <ul>
+                <li>No private keys or seed phrases are collected.</li>
+                <li>URL query parameters are stripped before reporting.</li>
+                <li>Wallet addresses are not sent by the beacon; values that appear in a referrer URL could still be included if a third-party site embeds them.</li>
+                <li>If Telegram credentials are unset, the visit endpoint does not forward messages.</li>
               </ul>
             </section>
           </article>

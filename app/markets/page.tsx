@@ -58,27 +58,27 @@ export default function MarketsPage() {
           </div>
           <h1>Concentrated Liquidity Markets</h1>
           <p>
-            Keepx starts narrow on purpose. Every pool is explicit, verified, and linked directly to an isolated range and simulation pipeline.
+            Keepx lists only independently verified Raydium CLMM pools. APR, TVL, and volume figures below are illustrative demo values, not live market feeds.
           </p>
         </div>
 
         {/* Stats Summary Strip */}
         <div className="page-stats-summary">
           <div className="stat-metric-card">
-            <small>Total Verified Pools</small>
-            <strong>{allowlistedPools.length} Active</strong>
+            <small>Verified CLMM Pools</small>
+            <strong>{allowlistedPools.filter((p) => p.status === "verified").length} Active</strong>
           </div>
           <div className="stat-metric-card">
-            <small>Allowlist Combined TVL</small>
+            <small>Demo Combined TVL</small>
             <strong>${(totalTvl / 1_000_000).toFixed(1)}M</strong>
           </div>
           <div className="stat-metric-card">
-            <small>24H Aggregate Volume</small>
+            <small>Demo 24H Volume</small>
             <strong>${(totalVol / 1_000_000).toFixed(1)}M</strong>
           </div>
           <div className="stat-metric-card">
-            <small>Top APR Opportunity</small>
-            <strong className="text-emerald-400">41.2% (BTC/SOL)</strong>
+            <small>Demo Est. APR</small>
+            <strong className="text-emerald-400">{allowlistedPools[0]?.apr ?? "—"} (SOL/USDC)</strong>
           </div>
         </div>
 
@@ -136,8 +136,8 @@ export default function MarketsPage() {
                 <th>Current Price</th>
                 <th>Fee Tier</th>
                 <th>Tick Spacing</th>
-                <th>24H Volume</th>
-                <th>Est. Fee APR</th>
+                <th>Demo 24H Volume</th>
+                <th>Demo Est. APR</th>
                 <th>Status</th>
                 <th />
               </tr>

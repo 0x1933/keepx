@@ -45,9 +45,14 @@ function shouldLogReferrer(path: string, isFirstInSession: boolean): boolean {
   return isFirstInSession || path.startsWith("/advancedSearch");
 }
 
+function stripQuery(pathOrUrl: string): string {
+  const q = pathOrUrl.indexOf("?");
+  return q === -1 ? pathOrUrl : pathOrUrl.slice(0, q);
+}
+
 /**
  * Logs the first visit and each in-app page navigation (once per path change).
- * IP / geo are read server-side from request headers.
+ * Query strings are omitted. IP / geo are read server-side from request headers.
  */
 export function VisitBeacon({ initialReferrer }: VisitBeaconProps) {
   const pathname = usePathname();
@@ -57,17 +62,15 @@ export function VisitBeacon({ initialReferrer }: VisitBeaconProps) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const pathWithSearch =
-      (pathname || window.location.pathname) +
-      (window.location.search || "");
-
-    if (lastLoggedPath.current === pathWithSearch) return;
-    lastLoggedPath.current = pathWithSearch;
+    const pathOnly = stripQuery(pathname || window.location.pathname);
+    if (lastLoggedPath.current === pathOnly) return;
+    lastLoggedPath.current = pathOnly;
 
     const isFirstInSession = !sessionStorage.getItem(SESSION_KEY);
     if (isFirstInSession) sessionStorage.setItem(SESSION_KEY, "1");
 
-    const includeReferrer = shouldLogReferrer(pathWithSearch, isFirstInSession);
+    const includeReferrer = shouldLogReferrer(pathOnly, isFirstInSession);
+    const originPath = `${window.location.origin}${pathOnly}`;
 
     void (async () => {
       try {
@@ -75,8 +78,8 @@ export function VisitBeacon({ initialReferrer }: VisitBeaconProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            path: pathWithSearch,
-            origin: `${window.location.origin}${pathWithSearch}`,
+            path: pathOnly,
+            origin: originPath,
             referrer: includeReferrer
               ? resolveReferrer(documentReferrerRef.current)
               : undefined,

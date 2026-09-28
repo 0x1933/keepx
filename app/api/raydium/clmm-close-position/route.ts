@@ -15,9 +15,9 @@ export async function GET(request: Request) {
     if (!wallet) throw new Error("Wallet is required.");
 
     const poolId = url.searchParams.get("poolId") ?? undefined;
-    const positions = await listClmmPositions(wallet, poolId);
+    const result = await listClmmPositions(wallet, poolId);
 
-    return Response.json({ status: "ok", positions });
+    return Response.json({ status: "ok", positions: result.positions, poolErrors: result.poolErrors });
   } catch (cause) {
     return Response.json(
       { status: "error", error: cause instanceof Error ? cause.message : "Lookup failed." },
